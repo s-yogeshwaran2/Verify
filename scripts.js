@@ -1,44 +1,82 @@
-const csvUrl = 'https://docs.google.com/spreadsheets/d/1KLw9CdXjern4YRsurtSSvsat2E-2PGtklOw3LTektgE/export?format=csv';
-
-document.addEventListener('DOMContentLoaded', () => {
-    // Get the ID from the query parameter in the URL
-    const urlParams = new URLSearchParams(window.location.search);
-    const internId = urlParams.get('id');
-
-    if (internId) {
-        displayInternDetails(internId);
-    }
-});
-
-function searchIntern() {
-    const internId = document.getElementById('internId').value.trim();
-    if (internId) {
-        displayInternDetails(internId);
-    }
+// Function to format date as dd/mmm/yyyy
+function formatDate(dateStr) {
+    const options = { day: '2-digit', month: 'short', year: 'numeric' };
+    const date = new Date(dateStr);
+    return date.toLocaleDateString('en-GB', options);
 }
 
-function displayInternDetails(id) {
-    fetch(csvUrl)
-        .then(response => response.text())
-        .then(text => {
-            const rows = text.split('\n').map(row => row.split(','));
-            const headers = rows[0];
-            const dataRows = rows.slice(1);
+// Function to validate certificate ID format
+function validateCertificateId(id) {
+    // Regular expression for the format "PFSI0000C"
+    const pattern = /^PFSI\d{4}[A-Z]$/;
+    return pattern.test(id);
+}
 
-            const intern = dataRows.find(row => row[0] === id);
+// Function to verify the certificate ID
+function verifyCertificate() {
+    const certificateId = document.getElementById('certificateId').value.trim();
+    const resultDiv = document.getElementById('result');
+    const loadingDiv = document.getElementById('loading');
 
-            if (intern) {
-                document.getElementById('intern-details').innerHTML = `
-                    <p><strong>Name:</strong> ${intern[1]}</p>
-                    <p><strong>Department:</strong> ${intern[2]}</p>
-                    <p><strong>Internship Period:</strong> ${intern[3]}</p>
-                `;
+    // Check if the certificate ID is empty
+    if (!certificateId) {
+        resultDiv.innerHTML = '<p class="error">Please enter a C.ID.</p>';
+        return; // Exit the function early
+    }
+
+    // Validate the certificate ID format
+    if (!validateCertificateId(certificateId)) {
+        resultDiv.innerHTML = '<p class="error">Invalid C.ID format. Please enter a valid C.ID in the format PFSI0000C.</p>';
+        return; // Exit the function early
+    }
+
+    // Show loading animation
+    loadingDiv.style.display = 'block';
+    resultDiv.innerHTML = ''; // Clear previous result
+
+    // Fetch data from the Google Apps Script web app
+    fetch(`https://script.google.com/macros/s/AKfycbx0KGSluyITJTW0DAO2gKayUlP5pjpv4xoojVhyHXxZOnZnOrmv8TuaunoHGSKUdKEg_A/exec?certificateId=${certificateId}`)
+        .then(response => response.json())  // Parse the response as JSON
+        .then(data => {
+            // Hide loading animation
+            loadingDiv.style.display = 'none';
+
+            // Check if the response indicates success
+            if (data.success) {
+                // Extract certificate details from the response
+                const details = data.certificateDetails;
+                if (!details) {
+                    // Display an error message if the ID does not exist
+                    resultDiv.innerHTML = '<p class="error">C.ID does not exist. Please check your C.ID again.</p>';
+                } else {
+                    // Format dates
+                    const startDate = formatDate(details.startDate);
+                    const endDate = formatDate(details.endDate);
+                    const issuedDate = formatDate(details.certificateIssuedDate);
+                    // Display the certificate details in the result div with updated styling
+                    resultDiv.innerHTML = `
+                        <p style="text-align: center; font-weight: bold; color: #112051;">Certificate Details</p>
+                        <p style="text-align: left; font-weight: normal;">Intern Name: ${details.internName}</p>
+                        <p style="text-align: left; font-weight: normal;">Domain: ${details.domain}</p>
+                        <p style="text-align: left; font-weight: normal;">Duration: ${startDate} - ${endDate}</p>
+                        <p style="text-align: left; font-weight: normal;">C.ID: ${details.certificateId}</p>
+                        <p style="text-align: left; font-weight: normal;">Certificate Issued Date: ${issuedDate}</p>
+                    `;
+                }
             } else {
-                document.getElementById('intern-details').innerHTML = 'Intern not found';
+                // Display an error message if the verification response indicates failure
+                // resultDiv.innerHTML = `<p class="error">${data.message}</p>`;
+                resultDiv.innerHTML = '<p class="error">C.ID does not exist. Please check your C.ID again.</p>';
             }
         })
         .catch(error => {
-            console.error('Error fetching data:', error);
-            document.getElementById('intern-details').innerHTML = 'Error loading intern details';
+            // Hide loading animation
+            loadingDiv.style.display = 'none';
+            // Display an error message if there was an issue fetching the data
+            resultDiv.innerHTML = `<p class="error">Error fetching certificate data. Please try again later.</p>`;
+        })
+        .finally(() => {
+            // Clear the input field after result is displayed
+            document.getElementById('certificateId').value = '';
         });
 }
